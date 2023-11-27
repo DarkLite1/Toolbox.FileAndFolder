@@ -581,9 +581,9 @@ Function Remove-ImportExcelHeaderProblemOnEmptySheetHC {
         Remove the objects returned from Import-Excel on an empty worksheet.
 
     .DESCRIPTION
-        This function is a fix for a bug in Import-Excel. In case an empty 
-        worksheet is read by the function Import-Excel, it will generate two 
-        objects. One object with values exactly the same as the header row 
+        This function is a fix for a bug in Import-Excel. In case an empty
+        worksheet is read by the function Import-Excel, it will generate two
+        objects. One object with values exactly the same as the header row
         titles and one object full of null values.
 
         This function simply filters out these unwanted objects.
@@ -1012,7 +1012,7 @@ Function New-FolderHC {
     .EXAMPLE
         New-FolderHC -Path "\\$env:COMPUTERNAME\s$\Test\Log_Test" -ChildPath 'Reports\Finance'
         \\$env:COMPUTERNAME\s$\Test\Log_Test\Reports\Finance
-        
+
         Creates the path "\\$env:COMPUTERNAME\s$\Test\Log_Test\Reports\Finance" and output the FullName of the path.
     #>
 
@@ -1088,8 +1088,8 @@ Function Remove-OldFilesHC {
         $compareDate = (Get-Date).AddDays(-$OlderThanDays)
 
         Filter Select-FilesHC {
-            if ($_.CreationTime -lt $compareDate) { 
-                Write-Output $_ 
+            if ($_.CreationTime -lt $compareDate) {
+                Write-Output $_
             }
         }
 
@@ -1125,7 +1125,7 @@ Function Remove-OldFilesHC {
 
                 $failedFolderRemoval = @()
 
-                while ($emptyFolders = Get-ChildItem -LiteralPath $Target -Recurse -Directory | 
+                while ($emptyFolders = Get-ChildItem -LiteralPath $Target -Recurse -Directory |
                     Where-Object { ($_.GetFileSystemInfos().Count -eq 0) -and ($failedFolderRemoval -notContains $_.FullName) }) {
                     $emptyFolders | ForEach-Object {
                         $fileToRemove = $True
@@ -1134,11 +1134,11 @@ Function Remove-OldFilesHC {
                         if (Test-Path -LiteralPath $_.FullName) {
                             $failedFolderRemoval += $_.FullName
                         }
-                    }   
+                    }
                 }
             }
         }
-    
+
         else {
             Get-ChildItem -Path $Target -File | Select-FilesHC |
             ForEach-Object {
@@ -1170,7 +1170,7 @@ Function Search-ScriptsHC {
         Opens the found files in the PowerShell ISE when it's a PowerShell file or in Notepad++
 
     .PARAMETER Filter
-        The include used with Get-ChildItem on which the selection is based. 
+        The include used with Get-ChildItem on which the selection is based.
         Can be file extensions like
         '*.ps1','*.psm1'
         '*.csv','*.txt'
@@ -1234,7 +1234,7 @@ Function Search-ScriptsHC {
                 Include     = $Include
                 ErrorAction = 'Stop'
             }
-            Get-ChildItem @Params | 
+            Get-ChildItem @Params |
             Where-Object { $Include -Contains "*$($_.Extension)" } | ForEach-Object {
                 $MatchCount = (
                     Select-String -LiteralPath $_ -Pattern $Pattern -AllMatches -SimpleMatch
@@ -1327,8 +1327,8 @@ Function Watch-FolderForChangesHC {
         Monitor a folder for changes and trigger actions when needed.
 
     .DESCRIPTION
-        Monitor the parent folder for changes (Changed, Deleted, Created, 
-        Renamed) of files and/or folders.When a change (or event) is triggered, 
+        Monitor the parent folder for changes (Changed, Deleted, Created,
+        Renamed) of files and/or folders.When a change (or event) is triggered,
         the action scriptblock is called to execute code.
 
     .PARAMETER Path
@@ -1350,7 +1350,7 @@ Function Watch-FolderForChangesHC {
     .PARAMETER CreatedAction
         Action to take when a new file/folder is created.
 
-        Variables available in the 'Global' scope that can be used in the 
+        Variables available in the 'Global' scope that can be used in the
         scriptblock are:
         - $Event: All event properties
         - $EventName: Name of the file/folder
@@ -1366,19 +1366,19 @@ Function Watch-FolderForChangesHC {
         Action to take when a file/folder is renamed.
 
     .PARAMETER Timeout
-        Specifies the maximum time, in seconds, that we monitor a folder. This 
-        is only useful for testing purposes. The default, -1, waits 
-        indefinitely. The timing starts when you submit the 
-        Watch-FolderForChangesHC command and the timer is reset every time an 
+        Specifies the maximum time, in seconds, that we monitor a folder. This
+        is only useful for testing purposes. The default, -1, waits
+        indefinitely. The timing starts when you submit the
+        Watch-FolderForChangesHC command and the timer is reset every time an
         event has been triggered.
 
     .PARAMETER LogFile
-        Finally, because a server typically runs unattended, it's convenient to 
-        be able to append all output of the event handlers to a log file. 
+        Finally, because a server typically runs unattended, it's convenient to
+        be able to append all output of the event handlers to a log file.
         Start-FileSystemWatcher can do that for you when you supply the
-        -LogFile <string> argument. When an event handler action produces 
-        output, it's written to output and append to the log fie. You can, of 
-        course, also have your event handlers use Write-Verbose or Write-Host, 
+        -LogFile <string> argument. When an event handler action produces
+        output, it's written to output and append to the log fie. You can, of
+        course, also have your event handlers use Write-Verbose or Write-Host,
         which are not written to the log file.
 
     .EXAMPLE
@@ -1394,7 +1394,7 @@ Function Watch-FolderForChangesHC {
             DeletedAction = {
                 Write-Host "Folder '$EventName' has been '$EventChangeType'" -ForegroundColor Green
             }
-            
+
         }
         Watch-FolderForChangesHC @params -Verbose
     #>
@@ -1407,7 +1407,7 @@ Function Watch-FolderForChangesHC {
         [Parameter(Position = 1)]
         [String]$Filter = '*.*',
         [ValidateNotNullOrEmpty()]
-        [String]$NotifyFilter = 'DirectoryName, LastWrite, DirectoryName',
+        [String]$NotifyFilter = 'FileName, LastWrite, DirectoryName',
         [Switch]$Recurse,
         [Scriptblock]$CreatedAction,
         [Scriptblock]$DeletedAction,
