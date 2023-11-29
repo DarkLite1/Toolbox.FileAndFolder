@@ -1112,9 +1112,9 @@ Function Remove-OldFilesHC {
         $fileToRemove = $false
 
         if (Test-Path $Target -PathType Container) {
-                Write-Verbose "Remove files older than '$compareDate' or $OlderThanDays days"
+            Write-Verbose "Remove files older than '$compareDate' or $OlderThanDays days"
 
-                Get-ChildItem -LiteralPath $Target -Recurse -File | Select-FilesHC |
+            Get-ChildItem -LiteralPath $Target -Recurse -File | Select-FilesHC |
             ForEach-Object {
                 $fileToRemove = $True
                 Remove-ItemHC -Item $_
@@ -1200,7 +1200,12 @@ Function Search-ScriptsHC {
     [CmdLetBinding()]
     Param (
         [String]$Pattern,
-        [String[]]$Path = @('T:\Prod', 'C:\Program Files\WindowsPowerShell\Modules', 'T:\Input'),
+        [String[]]$Path = @(
+            'T:\Prod',
+            'T:\Input',
+            'C:\Program Files\WindowsPowerShell\Modules',
+            'C:\Program Files\PowerShell\Modules'
+        ),
         [String[]]$Include = @('*.ps1', '*.psm1', '*.psd', '*.json', '*.csv', '*.txt'),
         [String]$NotepadPlusPlus = 'C:\Program Files\Notepad++\notepad++.exe',
         [Switch]$OpenFile
