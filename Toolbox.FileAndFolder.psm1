@@ -1474,7 +1474,7 @@ Function Watch-FolderForChangesHC {
 
         Function New-Watcher {
             $folderContent = @{}
-            $folderContent.Before = Get-ChildItem -Path $Path -Filter $Filter
+            $folderContent.Before = Get-ChildItem -Path $Path -Filter $Filter -Recurse:$Recurse
 
             if ($fsw) {
                 $fsw.Dispose() # free up memory
@@ -1501,7 +1501,7 @@ Function Watch-FolderForChangesHC {
 
             $fsw.EnableRaisingEvents = $true
 
-            $folderContent.After = Get-ChildItem -Path $Path -Filter $Filter
+            $folderContent.After = Get-ChildItem -Path $Path -Filter $Filter -Recurse:$Recurse
 
             if ($folderContent.Before -or $folderContent.After) {
                 if ($CreatedAction) {
