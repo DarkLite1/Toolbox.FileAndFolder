@@ -817,7 +817,6 @@ Function Lock-FileHC {
     $file.write($data, 0, $data.length)
     $file.Close()
 }
-
 Function Move-ToArchiveHC {
     <#
         .SYNOPSIS
@@ -994,7 +993,6 @@ Function Move-ToArchiveHC {
         }
     }
 }
-
 Function New-FolderHC {
     <#
     .SYNOPSIS
@@ -1043,7 +1041,6 @@ Function New-FolderHC {
         throw "Failed creating folder '$ChildPath': $_"
     }
 }
-
 Function Remove-OldFilesHC {
     <#
     .SYNOPSIS
@@ -1151,7 +1148,6 @@ Function Remove-OldFilesHC {
         }
     }
 }
-
 Function Search-ScriptsHC {
     <#
     .SYNOPSIS
@@ -1332,7 +1328,7 @@ Function Watch-FolderForChangesHC {
 
     .DESCRIPTION
         Monitor the parent folder for changes (Changed, Deleted, Created,
-        Renamed) of files and/or folders.When a change (or event) is triggered,
+        Renamed) of files and/or folders.When a change or event is triggered,
         the action scriptblock is called to execute code.
 
     .PARAMETER Path
@@ -1419,13 +1415,12 @@ Function Watch-FolderForChangesHC {
         [Parameter(Position = 1)]
         [String]$Filter = '*.*',
         [ValidateNotNullOrEmpty()]
+        [ValidateScript( { ($_ -notMatch 'FileRenamed|FileChanged') })]
         [IO.NotifyFilters]$NotifyFilter = 'FileName, LastWrite, DirectoryName',
         [Switch]$Recurse,
         [Scriptblock]$CreatedAction,
         [Scriptblock]$DeletedAction,
-        [Scriptblock]$ChangedAction,
-        [Scriptblock]$RenamedAction,
-        [ValidateRange(1, 300)]
+        [ValidateRange(1, 1800)]
         [Int]$Timeout = '60',
         [Boolean]$EndlessLoop = $true,
         [String]$LogFile
@@ -1446,6 +1441,8 @@ Function Watch-FolderForChangesHC {
                 [Scriptblock]$Action
             )
 
+            Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - Execute code"
+
             $output = Invoke-Command $Action
 
             if ($output) {
@@ -1457,6 +1454,15 @@ Function Watch-FolderForChangesHC {
             }
         }
 
+        Function Unregister-EventsHC {
+            @('FileCreated', 'FileDeleted').ForEach(
+                {
+                    Unregister-Event -SourceIdentifier $_ -ErrorAction Ignore
+                    Remove-Event -SourceIdentifier $_ -ErrorAction Ignore
+                }
+            )
+        }
+
         Function Register-EventsHC {
             if ($CreatedAction) {
                 Register-ObjectEvent $fsw Created -SourceIdentifier FileCreated
@@ -1464,22 +1470,19 @@ Function Watch-FolderForChangesHC {
             if ($DeletedAction) {
                 Register-ObjectEvent $fsw Deleted -SourceIdentifier FileDeleted
             }
-            if ($ChangedAction) {
-                Register-ObjectEvent $fsw Changed -SourceIdentifier FileChanged
-            }
-            if ($RenamedAction) {
-                Register-ObjectEvent $fsw Renamed -SourceIdentifier FileRenamed
-            }
-        }
-
-        Function Unregister-EventsHC {
-            @('FileCreated', 'FileDeleted', 'FileChanged', 'FileRenamed') | ForEach-Object {
-                Unregister-Event -SourceIdentifier $_ -ErrorAction Ignore
-                Remove-Event -SourceIdentifier $_ -ErrorAction Ignore
-            }
         }
 
         Function New-Watcher {
+            $folderContent = @{}
+            $folderContent.Before = Get-ChildItem -Path $Path -Filter $Filter
+
+            if ($fsw) {
+                $fsw.Dispose() # free up memory
+                Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - Stop watcher"
+            }
+
+            Start-Sleep -Seconds 5
+
             Unregister-EventsHC
 
             if (-not (Test-Path -Path $Path -PathType 'Container')) {
@@ -1497,6 +1500,41 @@ Function Watch-FolderForChangesHC {
             Register-EventsHC
 
             $fsw.EnableRaisingEvents = $true
+
+            $folderContent.After = Get-ChildItem -Path $Path -Filter $Filter
+
+            if ($folderContent.Before -or $folderContent.After) {
+                if ($CreatedAction) {
+                    $folderContent.After.where(
+                        { $folderContent.Before.Name -notContains $_.Name },
+                        'First'
+                    ).foreach(
+                        {
+                            Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - File created during watcher restart"
+
+                            $EventName = $_.Name
+                            $EventChangeType = 'Created'
+
+                            Start-ActionHC $CreatedAction
+                        }
+                    )
+                }
+                if ($DeletedAction) {
+                    $folderContent.Before.where(
+                        { $folderContent.After.Name -notContains $_.Name },
+                        'First'
+                    ).foreach(
+                        {
+                            Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - File removed during watcher restart"
+
+                            $EventName = $_.Name
+                            $EventChangeType = 'Removed'
+
+                            Start-ActionHC $DeletedAction
+                        }
+                    )
+                }
+            }
 
             $fsw
         }
@@ -1530,13 +1568,14 @@ Function Watch-FolderForChangesHC {
                     [String]$Global:EventName = $event.SourceEventArgs.Name
                     [System.IO.WatcherChangeTypes]$Global:EventChangeType = $Event.SourceEventArgs.ChangeType
 
-                    Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - EventID '$($event.EventIdentifier)' start '$EventChangeType' '$EventName'"
+                    Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - EventID '$($event.EventIdentifier)' Type '$EventChangeType' Name '$EventName'"
 
                     switch ($EventChangeType) {
-                        Changed { Start-ActionHC $ChangedAction; Break }
-                        Deleted { Start-ActionHC $DeletedAction; Break }
                         Created { Start-ActionHC $CreatedAction; Break }
-                        Renamed { Start-ActionHC $RenamedAction; Break }
+                        Deleted { Start-ActionHC $DeletedAction; Break }
+                        Default {
+                            Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - EventID '$($event.EventIdentifier)' Type '$EventChangeType' Name '$EventName'"
+                        }
                     }
 
                     Remove-Event -EventIdentifier $($event.EventIdentifier)
@@ -1551,9 +1590,7 @@ Function Watch-FolderForChangesHC {
                 # for this reason the watcher has to be restarted
 
                 if (((Get-Date) - $startDate).TotalSeconds -ge $Timeout) {
-                    Write-Verbose 'Timeout reached'
-
-                    $fsw.Dispose() # free up memory
+                    Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - Timeout of $Timeout seconds reached"
                     $fsw = New-Watcher
                 }
                 #endregion
