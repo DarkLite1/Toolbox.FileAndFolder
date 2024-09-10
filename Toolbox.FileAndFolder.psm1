@@ -1325,7 +1325,6 @@ Function Test-WriteToFolderHC {
         }
     }
 }
-
 Function Watch-FolderForChangesHC {
     <#
     .SYNOPSIS
@@ -1371,11 +1370,18 @@ Function Watch-FolderForChangesHC {
         Action to take when a file/folder is renamed.
 
     .PARAMETER Timeout
-        Specifies the maximum time, in seconds, that we monitor a folder. This
-        is only useful for testing purposes. The default, -1, waits
-        indefinitely. The timing starts when you submit the
-        Watch-FolderForChangesHC command and the timer is reset every time an
-        event has been triggered.
+        Specifies the maximum time in seconds to monitor a folder. When the
+        maximum seconds are reached the function exits, depending on the
+        parameter 'EndlessLoop' or continues running but will restart the
+        Watcher service.
+
+        Restarting the Watcher service is required to free up memory allocation.
+        This will ensure that events are still triggering when a network
+        connection issue occurred.
+
+    .PARAMETER EndlessLoop
+        Defines if the function runs forever or needs to stop running after a
+        specified amount of secondes, defined in 'TimeOut'.
 
     .PARAMETER LogFile
         Finally, because a server typically runs unattended, it's convenient to
@@ -1399,7 +1405,8 @@ Function Watch-FolderForChangesHC {
             DeletedAction = {
                 Write-Host "Folder '$EventName' has been '$EventChangeType'" -ForegroundColor Green
             }
-
+            EndlessLoop   = $true
+            Timeout       = 30
         }
         Watch-FolderForChangesHC @params -Verbose
     #>
@@ -1407,18 +1414,20 @@ Function Watch-FolderForChangesHC {
     [CmdletBinding()]
     Param (
         [Parameter(Mandatory)]
-        [ValidateScript( { Test-Path -Path $_ })]
+        [ValidateScript( { Test-Path -Path $_ -PathType 'Container' })]
         [String]$Path,
         [Parameter(Position = 1)]
         [String]$Filter = '*.*',
         [ValidateNotNullOrEmpty()]
-        [String]$NotifyFilter = 'FileName, LastWrite, DirectoryName',
+        [IO.NotifyFilters]$NotifyFilter = 'FileName, LastWrite, DirectoryName',
         [Switch]$Recurse,
         [Scriptblock]$CreatedAction,
         [Scriptblock]$DeletedAction,
         [Scriptblock]$ChangedAction,
         [Scriptblock]$RenamedAction,
-        [Int]$Timeout = '-1',
+        [ValidateRange(1, 300)]
+        [Int]$Timeout = '60',
+        [Boolean]$EndlessLoop = $true,
         [String]$LogFile
     )
 
@@ -1470,26 +1479,15 @@ Function Watch-FolderForChangesHC {
             }
         }
 
-        Try {
-            if (!$CreatedAction -and !$DeletedAction -and !$ChangedAction -and !$RenamedAction) {
-                throw "Specify at least one action for '-CreatedAction', '-DeletedAction', '-ChangedAction' or '-RenamedAction'"
+        Function New-Watcher {
+            Unregister-EventsHC
+
+            if (-not (Test-Path -Path $Path -PathType 'Container')) {
+                throw "Path '$Path' not found"
             }
 
-            Unregister-EventsHC
+            Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - Start watcher"
 
-            $CurrentLocation = Get-Location
-
-            Set-Location $Path
-        }
-        Catch {
-            Unregister-EventsHC
-            Set-Location $CurrentLocation
-            throw "Failed monitoring the folder '$Path' for changes: $_"
-        }
-    }
-
-    Process {
-        Try {
             [System.IO.FileSystemWatcher]$fsw = New-Object System.IO.FileSystemWatcher $Path, $Filter -Property @{
                 IncludeSubdirectories = $Recurse
                 InternalBufferSize    = 16384
@@ -1498,67 +1496,85 @@ Function Watch-FolderForChangesHC {
 
             Register-EventsHC
 
-            if ($Recurse) {
-                $recurseMessage = ' and subdirectories'
-            }
-
-            if ($Timeout -ne -1) {
-                Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - Monitoring '$Path\$Filter'$recurseMessage for '$Timeout' seconds (timer reset after every event)"
-            }
-            else {
-                Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - Monitoring '$Path\$Filter'$recurseMessage"
-            }
-
             $fsw.EnableRaisingEvents = $true
-            $ExitRequested = $false
 
-            do {
-                # Variables are 'Global' so they are visible from outside the module and usable within the scriptblocks
-                # Timeout is only used for Pester tests, not for exact testing of x time monitoring
-                $Global:Event = Wait-Event -Timeout $Timeout
-
-                if ($Event -eq $null) {
-                    $exitRequested = $true
-                }
-                else {
-                    [String]$Global:EventName = $Event.SourceEventArgs.Name
-                    [System.IO.WatcherChangeTypes]$Global:EventChangeType = $Event.SourceEventArgs.ChangeType
-
-                    Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - EventID '$($Event.EventIdentifier)' start '$EventChangeType' '$EventName'"
-
-                    switch ($EventChangeType) {
-                        Changed { Start-ActionHC $ChangedAction }
-                        Deleted { Start-ActionHC $DeletedAction }
-                        Created { Start-ActionHC $CreatedAction }
-                        Renamed { Start-ActionHC $RenamedAction }
-                    }
-
-                    Remove-Event -EventIdentifier $($Event.EventIdentifier)
-
-                    Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - EventID '$($Event.EventIdentifier)' end"
-                }
-            } while (!$ExitRequested)
-        }
-        Catch {
-            Unregister-EventsHC
-            Set-Location $CurrentLocation
-            throw "Failed monitoring the folder '$Path' for changes: $_"
+            $fsw
         }
     }
 
-    End {
+    Process {
         Try {
-            Unregister-EventsHC
-            Set-Location $CurrentLocation
-            Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - Stopped monitoring"
+            if (-not (
+                    $CreatedAction -or $DeletedAction -or
+                    $ChangedAction -or $RenamedAction)
+            ) {
+                throw 'At least one scriptblock argument needs to be provided'
+            }
+
+            Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - Monitor Path '$Path' Filter '$Filter' Recurse '$Recurse' for '$Timeout' seconds (timer reset after every event)"
+
+            $fsw = New-Watcher
+
+            do {
+                $startDate = Get-Date
+
+                #Global vars for use in the script blocks outside the module
+                $Global:event = Wait-Event -Timeout $Timeout
+
+                if ((-not $event) -and (-not $EndlessLoop)) {
+                    Write-Verbose 'Stop monitoring'
+                    break
+                }
+
+                if ($event) {
+                    [String]$Global:EventName = $event.SourceEventArgs.Name
+                    [System.IO.WatcherChangeTypes]$Global:EventChangeType = $Event.SourceEventArgs.ChangeType
+
+                    Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - EventID '$($event.EventIdentifier)' start '$EventChangeType' '$EventName'"
+
+                    switch ($EventChangeType) {
+                        Changed { Start-ActionHC $ChangedAction; Break }
+                        Deleted { Start-ActionHC $DeletedAction; Break }
+                        Created { Start-ActionHC $CreatedAction; Break }
+                        Renamed { Start-ActionHC $RenamedAction; Break }
+                    }
+
+                    Remove-Event -EventIdentifier $($event.EventIdentifier)
+
+                    Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - EventID '$($event.EventIdentifier)' end"
+                }
+
+                #region Workaround for network connection issues
+
+                # when the network connection to the Path is gone
+                # new files are no longer detected
+                # for this reason the watcher has to be restarted
+
+                if (((Get-Date) - $startDate).TotalSeconds -ge $Timeout) {
+                    Write-Verbose 'Timeout reached'
+
+                    $fsw.Dispose() # free up memory
+                    $fsw = New-Watcher
+                }
+                #endregion
+            } while ($true)
         }
         Catch {
-            Set-Location $CurrentLocation
-            throw "Failed monitoring the folder '$Path' for changes: $_"
+            $M = $_
+            $error.RemoveAt(0)
+            throw "Failed monitoring the folder '$Path' for changes: $M"
+        }
+        Finally {
+            Unregister-EventsHC
+
+            if ($fsw) {
+                $fsw.Dispose() # free up memory
+            }
+
+            Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - Stopped monitoring"
         }
     }
 }
-
 Function Write-ZipHC {
     <#
         .SYNOPSIS
