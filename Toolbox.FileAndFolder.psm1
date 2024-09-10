@@ -1421,7 +1421,7 @@ Function Watch-FolderForChangesHC {
         [Scriptblock]$CreatedAction,
         [Scriptblock]$DeletedAction,
         [ValidateRange(1, 1800)]
-        [Int]$Timeout = '60',
+        [Int]$Timeout = '300',
         [Boolean]$EndlessLoop = $true,
         [String]$LogFile
     )
