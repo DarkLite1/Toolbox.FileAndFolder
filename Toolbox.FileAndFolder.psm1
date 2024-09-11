@@ -1481,8 +1481,6 @@ Function Watch-FolderForChangesHC {
                 Write-Verbose "$((Get-Date).ToString('HH:mm:ss:fff')) - Stop watcher"
             }
 
-            Start-Sleep -Seconds 5
-
             Unregister-EventsHC
 
             if (-not (Test-Path -Path $Path -PathType 'Container')) {
