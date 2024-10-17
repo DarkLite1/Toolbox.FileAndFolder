@@ -1540,10 +1540,7 @@ Function Watch-FolderForChangesHC {
 
     Process {
         Try {
-            if (-not (
-                    $CreatedAction -or $DeletedAction -or
-                    $ChangedAction -or $RenamedAction)
-            ) {
+            if (-not ($CreatedAction -or $DeletedAction)) {
                 throw 'At least one scriptblock argument needs to be provided'
             }
 
@@ -1596,7 +1593,7 @@ Function Watch-FolderForChangesHC {
         }
         Catch {
             $M = $_
-            $error.RemoveAt(0)
+            $global:error.RemoveAt(0)
             throw "Failed monitoring the folder '$Path' for changes: $M"
         }
         Finally {
