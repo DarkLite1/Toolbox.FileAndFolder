@@ -575,6 +575,86 @@ Function Invoke-ExternalCommandHC {
     $Result
 }
 
+Function New-TextFileHC {
+    <#
+        .SYNOPSIS
+            Create a new text file based on another text file
+
+        .DESCRIPTION
+            Read a text file and replace a specific line of text with
+            other lines of text
+
+        .PARAMETER InputPath
+            Path to the original text file
+
+        .PARAMETER ReplaceLine
+            The line of text in the file that needs to be replaced
+
+        .PARAMETER NewLine
+            The new line(s) of text to add in the file, at the same location
+            as the old line of text
+
+        .PARAMETER NewFilePath
+            Path where the new text file will be saved
+    #>
+
+    Param (
+        [Parameter(Mandatory)]
+        [ValidateScript({ Test-Path -Path $_ })]
+        [String]$InputPath,
+        [Parameter(Mandatory)]
+        [String]$ReplaceLine,
+        [Parameter(Mandatory)]
+        [String[]]$NewLine,
+        [Parameter(Mandatory)]
+        [String]$NewFilePath,
+        [Switch]$Overwrite
+    )
+
+    try {
+        $fileContent = Get-Content -Path $InputPath
+
+        #region Get specific field in text file
+        $lineNumber = for ($i = 0; $i -lt $fileContent.Count; $i++) {
+            if ($fileContent[$i] -eq $ReplaceLine) {
+                $i
+            }
+        }
+
+        if ($lineNumber.count -gt 1) {
+            throw "Multiple lines found with the text '$ReplaceLine'"
+        }
+        #endregion
+
+        #region Create new file
+        try {
+            $params = @{
+                Path        = $NewFilePath
+                Encoding    = 'utf8'
+                ErrorAction = 'Stop'
+            }
+
+            if (-not $Overwrite) {
+                $params.NoClobber = $true
+            }
+
+            (
+                $fileContent[0..($lineNumber - 1)] +
+                $NewLine +
+                $fileContent[(($lineNumber + 1)..$fileContent.Length)]
+            ) |
+            Out-File @params
+        }
+        catch {
+            throw "Failed to create file '$NewFilePath': $_"
+        }
+        #endregion
+    }
+    catch {
+        throw "Failed creating a new text file: $_"
+    }
+}
+
 Function Remove-ImportExcelHeaderProblemOnEmptySheetHC {
     <#
     .SYNOPSIS
