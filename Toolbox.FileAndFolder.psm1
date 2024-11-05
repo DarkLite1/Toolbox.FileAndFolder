@@ -621,8 +621,8 @@ Function New-TextFileHC {
             }
         }
 
-        if ($lineNumber.count -gt 1) {
-            throw "Multiple lines found with the text '$ReplaceLine'"
+        if ($lineNumber.count -ne 1) {
+            throw "Found $($lineNumber.count) lines with the text '$ReplaceLine'"
         }
         #endregion
 
