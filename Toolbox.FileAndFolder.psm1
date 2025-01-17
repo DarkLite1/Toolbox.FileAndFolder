@@ -1121,6 +1121,62 @@ Function New-FolderHC {
         throw "Failed creating folder '$ChildPath': $_"
     }
 }
+Function Out-PrintPdfFileHC {
+    <#
+        .SYNOPSIS
+            Print a PDF document in silent mode
+
+        .DESCRIPTION
+            Use the Acrobat Reader command line to send a print job
+            to the printer. Afterwards the app is forcefully closed.
+
+        .EXAMPLE
+            $params = @{
+                FilePath    = "$ENV:TEMP\20250114.pdf"
+                PrinterName = '\\belspbran0011\BELPRBRAN603'
+            }
+            Out-PrintPdfFileHC @params
+
+        .NOTES
+            Acrobat Reader must be installed.
+    #>
+
+    Param (
+        [Parameter(Mandatory)]
+        [String]$FilePath,
+        [Parameter(Mandatory)]
+        [String]$PrinterName,
+        [String]$AcrobatReaderPath = 'C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe',
+        [Int]$WaitTimeForPrintingInSeconds = 5
+    )
+
+    try {
+        if (-not(Test-Path -LiteralPath $AcrobatReaderPath -PathType Leaf)) {
+            throw "Acrobat Reader path '$AcrobatReaderPath' not found"
+        }
+
+        if (-not(Test-Path -LiteralPath $FilePath -PathType Leaf)) {
+            throw "File path '$FilePath' not found"
+        }
+
+        $installedPrinters = Get-Printer
+
+        if ($installedPrinters.Name -notContains $PrinterName) {
+            throw "Printer '$PrinterName' not installed"
+        }
+
+        $process = Start-Process -FilePath $AcrobatReaderPath -ArgumentList "/s /o /h /t $filePath $printerName"
+
+
+        Start-Sleep -Seconds $WaitTimeForPrintingInSeconds
+
+        $process | Stop-Process
+    }
+    catch {
+        $M = "Failed to print PDF file '$FilePath': $_"
+        $global:Error.RemoveAt(0); throw $M
+    }
+}
 Function Remove-OldFilesHC {
     <#
     .SYNOPSIS
