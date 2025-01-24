@@ -1121,24 +1121,31 @@ Function New-FolderHC {
         throw "Failed creating folder '$ChildPath': $_"
     }
 }
-Function Out-PrintPdfFileHC {
+Function Out-PrintFileHC {
     <#
-        .SYNOPSIS
-            Print a PDF document in silent mode
+    .SYNOPSIS
+        Print a PDF document in silent mode
 
-        .DESCRIPTION
-            Use the Acrobat Reader command line to send a print job
-            to the printer. Afterwards the app is forcefully closed.
+    .DESCRIPTION
+        Use the Acrobat Reader command line to send a print job
+        to the printer. Afterwards the app is forcefully closed.
 
-        .EXAMPLE
-            $params = @{
-                FilePath    = "$ENV:TEMP\20250114.pdf"
-                PrinterName = '\\belspbran0011\BELPRBRAN603'
-            }
-            Out-PrintPdfFileHC @params
+    .PARAMETER FilePath
+        Path to the file to print
 
-        .NOTES
-            Acrobat Reader must be installed.
+    .PARAMETER PrinterName
+        The name or IP of the printer to print to
+
+    .PARAMETER PrinterPort
+        The port of the printer to print to
+
+    .EXAMPLE
+        $params = @{
+            FilePath    = "$ENV:TEMP\20250114.pdf"
+            PrinterName = 'BELPRBRAN603'
+            PrinterPort = 9000
+        }
+        Out-PrintFileHC @params
     #>
 
     Param (
@@ -1146,34 +1153,54 @@ Function Out-PrintPdfFileHC {
         [String]$FilePath,
         [Parameter(Mandatory)]
         [String]$PrinterName,
-        [String]$AcrobatReaderPath = 'C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe',
-        [Int]$WaitTimeForPrintingInSeconds = 5
+        [Parameter(Mandatory)]
+        [int]$PrinterPort
     )
 
     try {
-        if (-not(Test-Path -LiteralPath $AcrobatReaderPath -PathType Leaf)) {
-            throw "Acrobat Reader path '$AcrobatReaderPath' not found"
-        }
+        $ErrorActionPreference = 'Stop'
 
         if (-not(Test-Path -LiteralPath $FilePath -PathType Leaf)) {
             throw "File path '$FilePath' not found"
         }
 
-        $installedPrinters = Get-Printer
-
-        if ($installedPrinters.Name -notContains $PrinterName) {
-            throw "Printer '$PrinterName' not installed"
+        if (-not(Test-Connection -ComputerName $PrinterName -Count 1 -Quiet)) {
+            throw "PrinterName '$PrinterName' not online"
         }
 
-        $process = Start-Process -FilePath $AcrobatReaderPath -ArgumentList "/s /o /h /t $filePath $printerName"
+        #region Connect to printer
+        try {
+            $tcpClient = New-Object System.Net.Sockets.TcpClient
+            $tcpClient.Connect($PrinterName, $PrinterPort)
+        }
+        catch {
+            throw "Failed to open a TCP connection to printer '$PrinterName' on port '$PrinterPort': $_"
+        }
+        #endregion
 
+        #region Send file to printer
+        try {
+            $fileContent = [System.IO.File]::ReadAllBytes($FilePath)
+            $stream = $tcpClient.GetStream()
+            $stream.Write($fileContent, 0, $fileContent.Length)
+        }
+        catch {
+            throw "Failed to print file '$FilePath': $_"
+        }
+        #endregion
 
-        Start-Sleep -Seconds $WaitTimeForPrintingInSeconds
-
-        $process | Stop-Process
+        #region Close connection
+        try {
+            $stream.Close()
+            $tcpClient.Close()
+        }
+        catch {
+            throw "Failed to close the connection to printer '$PrinterName' on port '$PrinterPort': $_"
+        }
+        #endregion
     }
     catch {
-        $M = "Failed to print PDF file '$FilePath': $_"
+        $M = "Failed to print file '$FilePath': $_"
         $global:Error.RemoveAt(0); throw $M
     }
 }
