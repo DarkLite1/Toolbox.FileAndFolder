@@ -1160,6 +1160,7 @@ Function Out-PrintFileHC {
     try {
         $ErrorActionPreference = 'Stop'
 
+        #region Test parameters
         if (-not(Test-Path -LiteralPath $FilePath -PathType Leaf)) {
             throw "File path '$FilePath' not found"
         }
@@ -1167,6 +1168,7 @@ Function Out-PrintFileHC {
         if (-not(Test-Connection -ComputerName $PrinterName -Count 1 -Quiet)) {
             throw "PrinterName '$PrinterName' not online"
         }
+        #endregion
 
         #region Connect to printer
         try {
