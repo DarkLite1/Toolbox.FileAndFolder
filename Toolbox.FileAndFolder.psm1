@@ -1124,25 +1124,25 @@ Function New-FolderHC {
 Function Out-PrintFileHC {
     <#
     .SYNOPSIS
-        Print a PDF document in silent mode
+        Print a document
 
     .DESCRIPTION
-        Use the Acrobat Reader command line to send a print job
-        to the printer. Afterwards the app is forcefully closed.
+        Send the document straight to the printer without using
+        a print server or third party software.
 
     .PARAMETER FilePath
         Path to the file to print
 
     .PARAMETER PrinterName
-        The name or IP of the printer to print to
+        The name or IP of the printer
 
     .PARAMETER PrinterPort
-        The port of the printer to print to
+        The port of the printer
 
     .EXAMPLE
         $params = @{
-            FilePath    = "$ENV:TEMP\20250114.pdf"
-            PrinterName = 'BELPRBRAN603'
+            FilePath    = "$ENV:TEMP\MyFile.pdf"
+            PrinterName = 'PRINTER01'
             PrinterPort = 9000
         }
         Out-PrintFileHC @params
@@ -1176,18 +1176,26 @@ Function Out-PrintFileHC {
             $tcpClient.Connect($PrinterName, $PrinterPort)
         }
         catch {
-            throw "Failed to open a TCP connection to printer '$PrinterName' on port '$PrinterPort': $_"
+            throw "Failed to open a TCP connection to the printer: $_"
+        }
+        #endregion
+
+        #region Convert file content to bytes
+        try {
+            $fileContent = [System.IO.File]::ReadAllBytes($FilePath)
+        }
+        catch {
+            throw "Failed to convert the file content to bytes: $_"
         }
         #endregion
 
         #region Send file to printer
         try {
-            $fileContent = [System.IO.File]::ReadAllBytes($FilePath)
             $stream = $tcpClient.GetStream()
             $stream.Write($fileContent, 0, $fileContent.Length)
         }
         catch {
-            throw "Failed to print file '$FilePath': $_"
+            throw "Failed to print: $_"
         }
         #endregion
 
@@ -1197,12 +1205,12 @@ Function Out-PrintFileHC {
             $tcpClient.Close()
         }
         catch {
-            throw "Failed to close the connection to printer '$PrinterName' on port '$PrinterPort': $_"
+            throw "Failed to close the connection to the printer: $_"
         }
         #endregion
     }
     catch {
-        $M = "Failed to print file '$FilePath': $_"
+        $M = "Failed to print file '$FilePath' on printer '$PrinterName' port '$PrinterPort': $_"
         $global:Error.RemoveAt(0); throw $M
     }
 }
