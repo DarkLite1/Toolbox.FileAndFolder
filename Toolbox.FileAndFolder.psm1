@@ -1148,6 +1148,7 @@ Function Out-PrintFileHC {
         Out-PrintFileHC @params
     #>
 
+    [CmdLetBinding()]
     Param (
         [Parameter(Mandatory)]
         [String]$FilePath,
@@ -1191,6 +1192,8 @@ Function Out-PrintFileHC {
 
         #region Send file to printer
         try {
+            write-verbose "Sending file '$FilePath' to printer '$PrinterName' port '$PrinterPort'"
+
             $stream = $tcpClient.GetStream()
             $stream.Write($fileContent, 0, $fileContent.Length)
         }
